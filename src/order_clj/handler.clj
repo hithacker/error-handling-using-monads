@@ -2,7 +2,7 @@
   (:require [compojure.core :refer :all]
             [compojure.route :as route]
             [ring.middleware.defaults :refer [wrap-defaults api-defaults]]
-            [ring.middleware.json :refer [wrap-json-response]]
+            [ring.middleware.json :refer [wrap-json-response wrap-json-body]]
             [ring.util.response :refer [response not-found]]
             [cheshire.core :refer :all]
             [cats.core :as m]
@@ -40,16 +40,16 @@
 
 ;;;Monadic functions
 
-(defn mfind-order [order-id]
+(defn mfind-order [customer-org-id order-id]
   (cond
-    (= order-id 1) (either/right {:orderId order-id :price 725.0 :status "CONFIRMED"})
-    (= order-id 2) (either/right {:orderId order-id :price 540.0 :status "DRAFT"})
+    (= order-id "order1") (either/right {:orderId order-id :price 725.0 :status "CONFIRMED"})
+    (= order-id "order2") (either/right {:orderId order-id :price 540.0 :status "DRAFT"})
     :else (either/left {:status 404 :message "Order not found"})))
 
-(defn mcreate-orderline [order]
+(defn mcreate-orderline [quote-id order]
   (cond
     (= (:status order) "DRAFT")
-      (either/right {:orderLineId 123})
+      (either/right {:orderLineId 123 :quoteId quote-id})
     :else
       (either/left {:status 400 :message "New OrderLine can only be added to order with status DRAFT"})))
 
@@ -61,10 +61,10 @@
       :else
       (either/left {:status 400 :message "New OrderLine can only be added to order with status DRAFT"}))))
 
-(defn create-orderline [order-id]
-  (m/mlet [a (mfind-order order-id)
-           b (mcreate-orderline a)]
-          (m/return b)))
+(defn create-orderline [customer-org-id order-id quote-id]
+  (m/mlet [order (mfind-order customer-org-id order-id)
+           orderline (mcreate-orderline quote-id order)]
+          (m/return orderline)))
 
 
 ;;Defining common functions
@@ -125,14 +125,25 @@
    (context "/customers/:customerOrgId/orders" [customerOrgId]
      (GET "/" []
        (get-orders customerOrgId))
-     (GET "/:order-id" [order-id]
-       (get-order customerOrgId order-id))
-     (GET "/:order-id/lines" [order-id]
-       (fetch-order-lines order-id))
+     (context "/:orderId" [orderId]
+       (GET "/" []
+         (get-order customerOrgId orderId))
+       (GET "/lines" []
+         (fetch-order-lines orderId))
+       (POST "/lines" {{quoteId "quoteId"} :body}
+         (let [response (deref (create-orderline customerOrgId orderId quoteId))]
+           (if-let [status (:status response)]
+             {:status status
+              :headers {}
+              :body response}
+             {:status 200
+              :headers {}
+              :body response}))))
      (route/not-found "Not Found")))
 
 (def app
   (-> app-routes
+      (wrap-json-body)
       (wrap-json-response)
       (wrap-defaults api-defaults)))
 
