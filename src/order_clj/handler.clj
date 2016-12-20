@@ -8,6 +8,7 @@
             [cats.core :as m]
             [cats.monad.either :as either]
             [cats.monad.maybe :as maybe]
+            [clj-time.core :as t]
             [monger.core :as mg]
             [monger.collection :as mc]
             [monger.conversion :refer [from-db-object]]
@@ -21,11 +22,11 @@
   (mg/disconnect conn))
 
 ;;Defining entities
-(defn order [order]
+(defn order-model [order]
   (dissoc order :_id :customerOrgId))
 
-(defn orders [orders]
-  (map order orders))
+(defn orders-model [orders]
+  (map order-model orders))
 
 (defn orderline-model
   [quote orderline]
@@ -77,7 +78,7 @@
       (:quote
         (orderline)))))
 
-(defn fetch-quote-id [orderline]
+(defn get-quote-id [orderline]
   (-> orderline
       :quote
       .getId
@@ -90,34 +91,30 @@
 (defn compose-orderline
   [orderline]
   (-> orderline
-      fetch-quote-id
+      get-quote-id
       fetch-quote
       (orderline-model orderline)))
 
 (defn fetch-order-lines [order-id]
-  (response
-    (map compose-orderline
-         (mc/find-maps db "orderlines" {:orderId order-id}))))
+  (map compose-orderline
+       (mc/find-maps db "orderlines" {:orderId order-id})))
 
 ;;Defining route functions
+(defn get-order-lines [order-id]
+  (response (fetch-order-lines order-id)))
+
 (defn get-orders [customerOrgId]
-  (let [conn (mg/connect)
-        db (mg/get-db conn "order")
-        coll "orders"]
-    (response
-      (orders
-        (mc/find-maps
-          db coll {:customerOrgId customerOrgId})))))
+  (response
+    (orders-model
+      (mc/find-maps
+        db "orders" {:customerOrgId customerOrgId}))))
 
 (defn get-order [customerOrgId order-id]
-  (let [conn (mg/connect)
-        db (mg/get-db conn "order")
-        coll "orders"]
-    (if-let [order
-             (mc/find-one-as-map
-               db coll {:customerOrgId customerOrgId :orderId order-id})]
-      (response order)
-      (not-found {:message (format ORDER_NOT_FOUND customerOrgId order-id)}))))
+  (if-let [order
+           (mc/find-one-as-map
+             db "orders" {:customerOrgId customerOrgId :orderId order-id})]
+    (response (order-model order))
+    (not-found {:message (format ORDER_NOT_FOUND customerOrgId order-id)})))
 
 ;;Defining route handlers
 (defroutes app-routes
@@ -128,7 +125,7 @@
        (GET "/" []
          (get-order customerOrgId orderId))
        (GET "/lines" []
-         (fetch-order-lines orderId))
+         (get-order-lines orderId))
        (POST "/lines" {{quoteId "quoteId"} :body}
          (let [result (deref (create-orderline customerOrgId orderId quoteId))
                status-code (:code result)]
