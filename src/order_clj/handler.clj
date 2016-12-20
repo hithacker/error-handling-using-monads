@@ -5,15 +5,18 @@
             [ring.middleware.json :refer [wrap-json-response wrap-json-body]]
             [ring.util.response :refer [response status not-found]]
             [cheshire.core :refer :all]
+            [cheshire.generate :refer [add-encoder]]
             [cats.core :as m]
             [cats.monad.either :as either]
             [cats.monad.maybe :as maybe]
             [clj-time.core :as t]
+            [clj-time.format :as f]
             [monger.core :as mg]
             [monger.collection :as mc]
             [monger.conversion :refer [from-db-object]]
             monger.json)
-  (:import (org.bson.types ObjectId)))
+  (:import (org.bson.types ObjectId)
+           (org.joda.time DateTime)))
 
 (defonce conn (mg/connect))
 (defonce db (mg/get-db conn "order"))
@@ -21,12 +24,27 @@
 (defn disconnect []
   (mg/disconnect conn))
 
-;;Defining entities
-(defn order-model [order]
-  (dissoc order :_id :customerOrgId))
+;;Adding date encoder
+(add-encoder DateTime
+             (fn [c jsonGenerator]
+               (.writeString jsonGenerator (f/unparse (f/formatters :date) c))))
 
-(defn orders-model [orders]
-  (map order-model orders))
+;;Defining entities
+(defn order-model [order orderlines]
+  (-> order
+      (dissoc :_id :customerOrgId)
+      (assoc :startDate (first (sort (map (fn [ol] (:startDate (:campaign ol))) orderlines)))
+             :endDate (last (sort (map (fn [ol] (:endDate (:campaign ol))) orderlines))))))
+
+(defn parse-date [date-string]
+  "Converts date-string to clj-time date object using :date formatter"
+  (f/parse (f/formatters :date) date-string))
+
+(defn campaign-model [campaign]
+  (-> campaign
+      (assoc
+        :startDate (parse-date (:startDate campaign))
+        :endDate (parse-date (:endDate campaign)))))
 
 (defn orderline-model
   [quote orderline]
@@ -34,7 +52,7 @@
       (assoc
         :product (:product quote)
         :price (:price quote)
-        :campaign (:campaign quote))
+        :campaign (campaign-model (:campaign quote)))
       (dissoc
         :_id
         :quote)))
@@ -105,15 +123,18 @@
 
 (defn get-orders [customerOrgId]
   (response
-    (orders-model
-      (mc/find-maps
-        db "orders" {:customerOrgId customerOrgId}))))
+    (let [orders (mc/find-maps
+                   db "orders" {:customerOrgId customerOrgId})]
+      (map (fn [order]
+             (let [orderlines (fetch-order-lines (:orderId order))]
+               (order-model order orderlines)))
+           orders))))
 
 (defn get-order [customerOrgId order-id]
-  (if-let [order
-           (mc/find-one-as-map
-             db "orders" {:customerOrgId customerOrgId :orderId order-id})]
-    (response (order-model order))
+  (if-let [order (mc/find-one-as-map
+                   db "orders" {:customerOrgId customerOrgId :orderId order-id})]
+    (let [orderlines (fetch-order-lines order-id)]
+      (response (order-model order orderlines)))
     (not-found {:message (format ORDER_NOT_FOUND customerOrgId order-id)})))
 
 ;;Defining route handlers
