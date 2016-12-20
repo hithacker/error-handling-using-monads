@@ -3,7 +3,7 @@
             [compojure.route :as route]
             [ring.middleware.defaults :refer [wrap-defaults api-defaults]]
             [ring.middleware.json :refer [wrap-json-response wrap-json-body]]
-            [ring.util.response :refer [response not-found]]
+            [ring.util.response :refer [response status not-found]]
             [cheshire.core :refer :all]
             [cats.core :as m]
             [cats.monad.either :as either]
@@ -44,22 +44,15 @@
   (cond
     (= order-id "order1") (either/right {:orderId order-id :price 725.0 :status "CONFIRMED"})
     (= order-id "order2") (either/right {:orderId order-id :price 540.0 :status "DRAFT"})
-    :else (either/left {:status 404 :message "Order not found"})))
+    :else (either/left {:code 404 :message "Order not found"})))
 
 (defn mcreate-orderline [quote-id order]
   (cond
     (= (:status order) "DRAFT")
       (either/right {:orderLineId 123 :quoteId quote-id})
     :else
-      (either/left {:status 400 :message "New OrderLine can only be added to order with status DRAFT"})))
-
-(defn mfuncreate-orderline []
-  (fn [order]
-    (cond
-      (= (:status order) "DRAFT")
-      (either/right {:orderLineId 123})
-      :else
-      (either/left {:status 400 :message "New OrderLine can only be added to order with status DRAFT"}))))
+      (either/left {:code 400
+                    :message "New OrderLine can only be added to order with status DRAFT"})))
 
 (defn create-orderline [customer-org-id order-id quote-id]
   (m/mlet [order (mfind-order customer-org-id order-id)
@@ -131,14 +124,11 @@
        (GET "/lines" []
          (fetch-order-lines orderId))
        (POST "/lines" {{quoteId "quoteId"} :body}
-         (let [response (deref (create-orderline customerOrgId orderId quoteId))]
-           (if-let [status (:status response)]
-             {:status status
-              :headers {}
-              :body response}
-             {:status 200
-              :headers {}
-              :body response}))))
+         (let [result (deref (create-orderline customerOrgId orderId quoteId))
+               status-code (:code result)]
+           (-> result
+               (response)
+               (status status-code)))))
      (route/not-found "Not Found")))
 
 (def app
