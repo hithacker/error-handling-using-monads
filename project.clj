@@ -14,4 +14,5 @@
                         [com.novemberain/monger "3.1.0"]
                         [cheshire "5.6.3"]
                         [org.slf4j/slf4j-nop "1.7.12"]
-                        [funcool/cats "2.0.0"]]}})
+                        [funcool/cats "2.0.0"]
+                        [clj-time "0.12.2"]]}})
