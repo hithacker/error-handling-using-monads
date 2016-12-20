@@ -30,11 +30,25 @@
                (.writeString jsonGenerator (f/unparse (f/formatters :date) c))))
 
 ;;Defining entities
+(defrecord Price [amount currency])
+
+(defn order-price [orderlines]
+  (let [total-amount (->> orderlines
+                          (map :price)
+                          (map :amount)
+                          (reduce +))]
+    (Price. total-amount (-> orderlines
+                             first
+                             :price
+                             :currency))))
+
 (defn order-model [order orderlines]
   (-> order
       (dissoc :_id :customerOrgId)
       (assoc :startDate (first (sort (map (fn [ol] (:startDate (:campaign ol))) orderlines)))
-             :endDate (last (sort (map (fn [ol] (:endDate (:campaign ol))) orderlines))))))
+             :endDate (last (sort (map (fn [ol] (:endDate (:campaign ol))) orderlines)))
+             :price (order-price orderlines)
+             :confirmedDate (:confirmedDate order))))
 
 (defn parse-date [date-string]
   "Converts date-string to clj-time date object using :date formatter"
@@ -51,7 +65,7 @@
   (-> orderline
       (assoc
         :product (:product quote)
-        :price (:price quote)
+        :price (update-in (:price quote) [:amount] bigdec)
         :campaign (campaign-model (:campaign quote)))
       (dissoc
         :_id
