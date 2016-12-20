@@ -46,17 +46,23 @@
     (= order-id "order2") (either/right {:orderId order-id :price 540.0 :status "DRAFT"})
     :else (either/left {:code 404 :message "Order not found"})))
 
-(defn mcreate-orderline [quote-id order]
+(defn mfind-quote [quote-id]
+  (cond
+    (= quote-id "quote1") (either/right {:quoteId quote-id :startDate "2016-12-25"})
+    :else (either/left {:code 404 :message "Quote not found"})))
+
+(defn mcreate-orderline [quote order]
   (cond
     (= (:status order) "DRAFT")
-      (either/right {:orderLineId 123 :quoteId quote-id})
+      (either/right {:orderLineId 123 :quoteId quote})
     :else
       (either/left {:code 400
                     :message "New OrderLine can only be added to order with status DRAFT"})))
 
 (defn create-orderline [customer-org-id order-id quote-id]
   (m/mlet [order (mfind-order customer-org-id order-id)
-           orderline (mcreate-orderline quote-id order)]
+           quote (mfind-quote quote-id)
+           orderline (mcreate-orderline quote order)]
           (m/return orderline)))
 
 
