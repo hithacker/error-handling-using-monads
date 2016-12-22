@@ -45,8 +45,16 @@
 (defn order-model [order orderlines]
   (-> order
       (dissoc :_id :customerOrgId)
-      (assoc :startDate (first (sort (map (fn [ol] (:startDate (:campaign ol))) orderlines)))
-             :endDate (last (sort (map (fn [ol] (:endDate (:campaign ol))) orderlines)))
+      (assoc :startDate (->> orderlines
+                             (map :campaign)
+                             (map :startDate)
+                             sort
+                             first)
+             :endDate (->> orderlines
+                           (map :campaign)
+                           (map :startDate)
+                           sort
+                           last)
              :price (order-price orderlines)
              :confirmedDate (:confirmedDate order))))
 
