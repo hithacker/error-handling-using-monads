@@ -15,4 +15,5 @@
                         [cheshire "5.6.3"]
                         [org.slf4j/slf4j-nop "1.7.12"]
                         [funcool/cats "2.0.0"]
-                        [clj-time "0.12.2"]]}})
+                        [clj-time "0.12.2"]
+                        [aysylu/loom "0.6.0"]]}})

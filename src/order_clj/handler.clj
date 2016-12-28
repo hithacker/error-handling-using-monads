@@ -145,12 +145,9 @@
 
 (defn get-orders [customerOrgId]
   (response
-    (let [orders (mc/find-maps
-                   db "orders" {:customerOrgId customerOrgId})]
-      (map (fn [order]
-             (let [orderlines (fetch-order-lines (:orderId order))]
-               (order-model order orderlines)))
-           orders))))
+   (map (fn [order]
+          (order-model order (fetch-order-lines (:orderId order))))
+        (mc/find-maps db "orders" {:customerOrgId customerOrgId}))))
 
 (defn get-order [customerOrgId order-id]
   (if-let [order (mc/find-one-as-map
@@ -182,4 +179,3 @@
       (wrap-json-body)
       (wrap-json-response)
       (wrap-defaults api-defaults)))
-
