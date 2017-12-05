@@ -1,6 +1,6 @@
 # order-clj
 
-FIXME
+Look at https://github.com/hithacker/error-handling-using-monads/blob/master/src/order_clj/handler.clj please
 
 ## Prerequisites
 
